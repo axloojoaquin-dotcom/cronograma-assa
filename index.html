@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema Gestión Cronograma</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body style="display: flex; justify-content: center; align-items: center; min-height: 100vh;">
+  <div style="text-align: center; color: #005f85;">
+    <img src="img/LogoIcon.png" alt="Logo" class="navbar-logo" style="height: 50px; margin-bottom: 15px;">
+    <h2>Cargando Sistema Gestión Cronograma...</h2>
+  </div>
+
+  <script src="shared.js"></script>
+  <script>
+    // Enrutador de acceso inicial
+    const sesionStr = localStorage.getItem('assa_usuario_sesion');
+    if (!sesionStr) {
+      window.location.replace('pages/login.html');
+    } else {
+      try {
+        const usuario = JSON.parse(sesionStr);
+        if (usuario.perfil === 'Administrador') {
+          window.location.replace('pages/planificacion.html');
+        } else {
+          window.location.replace('pages/aprobaciones.html');
+        }
+      } catch (e) {
+        localStorage.removeItem('assa_usuario_sesion');
+        window.location.replace('pages/login.html');
+      }
+    }
+  </script>
+</body>
+</html>

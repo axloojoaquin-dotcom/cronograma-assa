@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Planificación - Generación de Cronogramas</title>
+  
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- SheetJS para lectura y exportación Excel -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  
+  <!-- Jspreadsheet CE y Jsuites -->
+  <script src="https://cdn.jsdelivr.net/npm/jspreadsheet-ce@4.13.3/dist/index.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jspreadsheet-ce@4.13.3/dist/jspreadsheet.min.css" type="text/css" />
+  <script src="https://cdn.jsdelivr.net/npm/jsuites@4.3.2/dist/jsuites.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsuites@4.3.2/dist/jsuites.min.css" type="text/css" />
+
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+  <header></header>
+
+  <div class="container">
+    
+    <!-- 1. CARGA DE ARCHIVOS BASE -->
+    <div class="section-card">
+      <h2>1. Carga de Archivos Base</h2>
+      <p class="section-desc">Carga el maestro actual de ISU y el cronograma anterior de referencia para contrastar el ciclo de 60 días de consumo.</p>
+      
+      <div class="files-upload-grid">
+        <div class="file-box">
+          <div class="file-box-title"><i class="fas fa-file-excel"></i> Archivo 1: Export de ISU Actual</div>
+          <p class="file-box-info">Columnas esperadas: <strong>Ruta</strong>, <strong>Porción</strong> y <strong>Fecha Planificada de Lectura</strong>.</p>
+          <input type="file" id="fileIsu" accept=".xlsx, .xls, .csv" class="file-input">
+          <div id="statusIsu" class="file-status"><i class="fas fa-clock"></i> Pendiente de carga</div>
+        </div>
+
+        <div class="file-box">
+          <div class="file-box-title"><i class="fas fa-history"></i> Archivo 2: Cronograma Anterior (Referencia)</div>
+          <p class="file-box-info">Columnas esperadas: <strong>Ruta</strong> y <strong>Lectura</strong> (o Fecha Planificada anterior).</p>
+          <input type="file" id="fileHistorico" accept=".xlsx, .xls, .csv" class="file-input">
+          <div id="statusHistorico" class="file-status"><i class="fas fa-clock"></i> Pendiente de carga</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. ÁMBITO TERRITORIAL Y PARÁMETROS -->
+    <div class="section-card">
+      <h2>2. Seleccionar Ámbito Territorial y Periodo</h2>
+      <div class="selection-panel">
+        
+        <!-- Árbol de distritos y rutas -->
+        <div class="selection-group" style="flex: 1.8;">
+          <div class="distritos-toolbar">
+            <button type="button" class="btn-sub" onclick="marcarTodos(true)">Marcar Todos</button>
+            <button type="button" class="btn-sub" onclick="marcarTodos(false)">Desmarcar Todos</button>
+          </div>
+          <div id="listaDistritosDinamica"></div>
+        </div>
+
+        <!-- Periodo y restricciones -->
+        <div class="selection-group panel-periodo">
+          <h3>Periodo Destino y Restricciones</h3>
+          
+          <div class="period-control-container">
+            <div class="period-control">
+              <label for="periodoSelect">Periodo:</label>
+              <select id="periodoSelect">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6" selected>6</option>
+              </select>
+              <span>-</span>
+              <input type="number" id="yearInput" value="2026" min="2020" max="2099" class="input-year" placeholder="Año">
+            </div>
+          </div>
+
+          <div class="fechas-rango-box">
+            <h4>Ventana de Fechas Permitidas:</h4>
+            <div class="fechas-rango-inputs">
+              <div class="fecha-campo">
+                <label for="fechaDesdeInput">Fecha Desde (Mínima):</label>
+                <input type="text" id="fechaDesdeInput" placeholder="dd.mm.yyyy">
+              </div>
+              <div class="fecha-campo">
+                <label for="fechaHastaInput">Fecha Hasta (Máxima):</label>
+                <input type="text" id="fechaHastaInput" placeholder="dd.mm.yyyy">
+              </div>
+            </div>
+            <small class="texto-ayuda">Se calculan según el Periodo y Distrito, pero puedes modificarlas a gusto.</small>
+          </div>
+
+          <div class="rules-box">
+            <h4>Reglas Activas:</h4>
+            <ul>
+              <li><strong>Generación:</strong> -3 días hábiles de la lectura</li>
+              <li><strong>Captura SISA:</strong> +2 días hábiles de la lectura</li>
+              <li><strong>Control Consumo:</strong> ~60 días sobre periodo anterior</li>
+            </ul>
+          </div>
+
+          <button class="btn-main btn-block" id="btnProcesarCronograma">
+            <i class="fas fa-calculator"></i> Procesar y Calcular
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. GRILLA DE RESULTADOS JSPREADSHEET -->
+    <div class="section-card" id="cardTabla" style="display: none;">
+      <div class="table-header-actions">
+        <div>
+          <h2 id="tituloTabla">3. Cronograma Proyectado</h2>
+          <p class="subtitle-alert" id="resumenAlertas"></p>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <button class="btn-cancel" id="btnCancelarGeneracion"><i class="fas fa-times"></i> Cancelar</button>
+          <button class="btn-excel" id="btnBajarExcel"><i class="fas fa-download"></i> Bajar a Excel</button>
+          <button class="btn-main btn-save" id="btnEnviarPropuesta">
+            <i class="fas fa-paper-plane"></i> Enviar Propuesta a Supabase
+          </button>
+        </div>
+      </div>
+      <div id="spreadsheet-container"></div>
+    </div>
+
+  </div>
+
+  <!-- Librería Oficial Supabase JS -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../shared.js"></script>
+
+  <script>
+    // Control de acceso: Vista exclusiva de Administrador
+    const usuarioActual = verificarSesion();
+    if (!usuarioActual || usuarioActual.perfil !== 'Administrador') {
+      window.location.replace('aprobaciones.html');
+    }
+
+    renderizarNavbar('planificacion');
+
+    let rutasBase = getRutasBase();
+    let datosIsu = {};
+    let datosHistorico = {};
+    let tablaBorrador = null;
+
+    // 1. Renderizar árbol de Distritos y Rutas
+    function renderDistritos() {
+      const cont = document.getElementById('listaDistritosDinamica');
+      let html = '';
+      Object.keys(rutasBase).sort().forEach(dId => {
+        const d = rutasBase[dId];
+        html += `
+          <div class="distrito-item">
+            <div class="distrito-header">
+              <label>
+                <input type="checkbox" class="chk-distrito" value="${dId}"> 
+                ${dId} - ${d.nombre} (${d.rutas.length} rutas)
+              </label>
+              <button type="button" class="btn-desplegar" onclick="toggleRutas('${dId}', this)">Ver Rutas</button>
+            </div>
+            <div class="rutas-container" id="rutas-${dId}">
+        `;
+        d.rutas.forEach(r => {
+          html += `
+            <label class="ruta-item">
+              <input type="checkbox" class="chk-ruta chk-hijo-${dId}" value="${r}" data-dist="${dId}"> ${r}
+            </label>
+          `;
+        });
+        html += `</div></div>`;
+      });
+      cont.innerHTML = html;
+
+      document.querySelectorAll('.chk-distrito').forEach(chk => {
+        chk.addEventListener('change', e => {
+          document.querySelectorAll(`.chk-hijo-${e.target.value}`).forEach(c => c.checked = e.target.checked);
+          actualizarFechas();
+        });
+      });
+      document.querySelectorAll('.chk-ruta').forEach(chk => {
+        chk.addEventListener('change', e => {
+          const dId = e.target.getAttribute('data-dist');
+          document.querySelector(`.chk-distrito[value="${dId}"]`).checked = 
+            Array.from(document.querySelectorAll(`.chk-hijo-${dId}`)).every(c => c.checked);
+          actualizarFechas();
+        });
+      });
+    }
+
+    window.toggleRutas = function(id, btn) {
+      const el = document.getElementById(`rutas-${id}`);
+      const abierto = el.style.display === 'grid';
+      el.style.display = abierto ? 'none' : 'grid';
+      btn.innerText = abierto ? 'Ver Rutas' : 'Ocultar';
+    };
+
+    window.marcarTodos = function(estado) {
+      document.querySelectorAll('.chk-distrito, .chk-ruta').forEach(c => c.checked = estado);
+      actualizarFechas();
+    };
+
+    function actualizarFechas() {
+      const periodo = document.getElementById('periodoSelect').value;
+      const anio = parseInt(document.getElementById('yearInput').value) || 2026;
+      const anioAnt = anio - 1;
+      const marcados = Array.from(document.querySelectorAll('.chk-distrito:checked')).map(d => d.value);
+      const soloRosario = (marcados.length === 1 && marcados[0] === '109');
+      let desde = '', hasta = '';
+
+      if (soloRosario) {
+        const rangos = { 
+          '1': [`01.10.${anioAnt}`, `30.11.${anioAnt}`], 
+          '2': [`01.12.${anioAnt}`, `31.01.${anio}`], 
+          '3': [`01.02.${anio}`, `31.03.${anio}`], 
+          '4': [`01.04.${anio}`, `31.05.${anio}`], 
+          '5': [`01.06.${anio}`, `31.07.${anio}`], 
+          '6': [`01.08.${anio}`, `30.09.${anio}`] 
+        };
+        [desde, hasta] = rangos[periodo];
+      } else {
+        const bisiesto = (anio % 4 === 0 && (anio % 100 !== 0 || anio % 400 === 0));
+        const feb = bisiesto ? `29.02.${anio}` : `28.02.${anio}`;
+        const rangos = { 
+          '1': [`01.11.${anioAnt}`, `31.12.${anioAnt}`], 
+          '2': [`01.01.${anio}`, feb], 
+          '3': [`01.03.${anio}`, `30.04.${anio}`], 
+          '4': [`01.05.${anio}`, `30.06.${anio}`], 
+          '5': [`01.07.${anio}`, `31.08.${anio}`], 
+          '6': [`01.09.${anio}`, `31.10.${anio}`] 
+        };
+        [desde, hasta] = rangos[periodo];
+      }
+      document.getElementById('fechaDesdeInput').value = desde;
+      document.getElementById('fechaHastaInput').value = hasta;
+    }
+
+    document.getElementById('periodoSelect').addEventListener('change', actualizarFechas);
+    document.getElementById('yearInput').addEventListener('input', actualizarFechas);
+
+    // 2. Procesamiento de Archivos Base
+    function normalizarClave(txt) { 
+      return String(txt || '').trim().toLowerCase().replace(/[\s_\-.]/g, ''); 
+    }
+
+    document.getElementById('fileIsu').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const wb = XLSX.read(new Uint8Array(evt.target.result), { type: 'array', cellDates: true });
+        const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+        datosIsu = {};
+        let count = 0;
+        json.forEach(row => {
+          let ruta = '', porcion = '', fecha = null;
+          for (let k in row) {
+            const kn = normalizarClave(k);
+            if (kn.includes('ruta') || kn.includes('unidadlectura')) ruta = String(row[k]).trim();
+            if (kn.includes('porcion')) porcion = String(row[k]).trim();
+            if (kn.includes('fecha') || kn.includes('planificada')) fecha = parseDate(row[k]);
+          }
+          if (ruta) { 
+            datosIsu[ruta] = { porcion: porcion || '1', fechaPlanificada: fecha }; 
+            count++; 
+          }
+        });
+        document.getElementById('statusIsu').className = 'file-status loaded';
+        document.getElementById('statusIsu').innerHTML = `<i class="fas fa-check-circle"></i> Cargado (${count} rutas)`;
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    document.getElementById('fileHistorico').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const wb = XLSX.read(new Uint8Array(evt.target.result), { type: 'array', cellDates: true });
+        const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+        datosHistorico = {};
+        let count = 0;
+        json.forEach(row => {
+          let ruta = '', fecha = null;
+          for (let k in row) {
+            const kn = normalizarClave(k);
+            if (kn.includes('ruta') || kn.includes('unidadlectura')) ruta = String(row[k]).trim();
+            if (kn.includes('lectura') || kn.includes('fecha')) fecha = parseDate(row[k]);
+          }
+          if (ruta && fecha) { 
+            datosHistorico[ruta] = { fechaLecturaAnterior: fecha }; 
+            count++; 
+          }
+        });
+        document.getElementById('statusHistorico').className = 'file-status loaded';
+        document.getElementById('statusHistorico').innerHTML = `<i class="fas fa-check-circle"></i> Cargado (${count} rutas)`;
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    // 3. Motor de Cálculo del Cronograma
+    document.getElementById('btnProcesarCronograma').addEventListener('click', () => {
+      const rutas = Array.from(document.querySelectorAll('.chk-ruta:checked'));
+      if (rutas.length === 0) return alert('Selecciona al menos una ruta.');
+      const fMin = parseDate(document.getElementById('fechaDesdeInput').value);
+      const fMax = parseDate(document.getElementById('fechaHastaInput').value);
+      if (!fMin || !fMax) return alert('Fechas Desde/Hasta inválidas.');
+
+      let filas = [], desvios = 0;
+      rutas.forEach((chk, idx) => {
+        const ruta = chk.value;
+        const dId = chk.getAttribute('data-dist');
+        const infoIsu = datosIsu[ruta];
+        const infoHist = datosHistorico[ruta];
+        const porcion = infoIsu?.porcion || '1';
+        let fPlan = infoIsu?.fechaPlanificada;
+        let fLectAnt = infoHist?.fechaLecturaAnterior;
+
+        let fLect = null;
+        if (fPlan && fPlan >= fMin && fPlan <= fMax) {
+          fLect = new Date(fPlan.getTime());
+        } else if (fLectAnt || fPlan) {
+          let t = new Date((fLectAnt || fPlan).getTime());
+          while (t < fMin) t.setDate(t.getDate() + 60);
+          if (t > fMax) t = new Date(fMin.getTime());
+          fLect = t;
+        } else {
+          let t = new Date(fMin.getTime());
+          t.setDate(t.getDate() + (idx % 35));
+          if (t > fMax) t = new Date(fMax.getTime());
+          fLect = t;
+        }
+
+        if (esDiaNoLaborable(fLect)) fLect = agregarDiasHabiles(fLect, 1);
+        if (fLect > fMax) fLect = agregarDiasHabiles(fMax, -1);
+
+        let diasConsumo = '';
+        if (fLectAnt && fLect) {
+          diasConsumo = Math.round((fLect.getTime() - fLectAnt.getTime()) / (1000 * 86400));
+          if (diasConsumo < 56 || diasConsumo > 64) desvios++;
+        }
+
+        filas.push([
+          dId, ruta, formatDate(agregarDiasHabiles(fLect, -3)), formatDate(fLect),
+          formatDate(agregarDiasHabiles(fLect, 2)), formatDate(fLect), porcion,
+          formatTurno(ruta, fLect), formatDate(fLectAnt), diasConsumo
+        ]);
+      });
+
+      const cont = document.getElementById('spreadsheet-container');
+      if (tablaBorrador) { 
+        try { jspreadsheet.destroy(cont); } catch(e){} 
+      }
+      cont.innerHTML = '';
+
+      tablaBorrador = jspreadsheet(cont, {
+        data: filas,
+        columns: [
+          { type: 'text', title: 'Distrito', width: 75 },
+          { type: 'text', title: 'Ruta', width: 95 },
+          { type: 'text', title: 'Generación', width: 130 },
+          { type: 'text', title: 'Fecha Planificada', width: 140 },
+          { type: 'text', title: 'Captura SISA', width: 120 },
+          { type: 'text', title: 'Lectura', width: 120 },
+          { type: 'text', title: 'Porción', width: 70 },
+          { type: 'text', title: 'Turno', width: 175 },
+          { type: 'text', title: 'Lectura Anterior', width: 130 },
+          { type: 'text', title: 'Días Consumo', width: 100 }
+        ]
+      });
+
+      document.getElementById('cardTabla').style.display = 'block';
+      document.getElementById('resumenAlertas').innerText = desvios > 0 
+        ? `⚠️ ${desvios} rutas presentan desvío del ciclo bimestral.` 
+        : '✅ Rutas calculadas correctamente dentro de la ventana.';
+      document.getElementById('cardTabla').scrollIntoView({ behavior: 'smooth' });
+    });
+
+    document.getElementById('btnCancelarGeneracion').addEventListener('click', () => {
+      if (confirm('¿Descartar este cronograma proyectado?')) {
+        document.getElementById('cardTabla').style.display = 'none';
+        tablaBorrador = null;
+      }
+    });
+
+    document.getElementById('btnBajarExcel').addEventListener('click', () => {
+      if (!tablaBorrador) return;
+      const headers = ['Distrito', 'Ruta', 'Generación', 'Fecha Planificada', 'Captura SISA', 'Lectura', 'Porción', 'Turno', 'Lectura Anterior', 'Días Consumo'];
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...tablaBorrador.getData()]);
+      XLSX.utils.book_append_sheet(wb, ws, "Cronograma");
+      XLSX.writeFile(wb, `Cronograma_${document.getElementById('yearInput').value}_${document.getElementById('periodoSelect').value}.xlsx`);
+    });
+
+    // 4. Enviar Propuesta directamente a Supabase
+    document.getElementById('btnEnviarPropuesta').addEventListener('click', async () => {
+      if (!tablaBorrador) return;
+      
+      const btn = document.getElementById('btnEnviarPropuesta');
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Guardando en Supabase...`;
+
+      const periodo = `${document.getElementById('yearInput').value}-${document.getElementById('periodoSelect').value}`;
+      const datos = tablaBorrador.getData();
+
+      const nuevaPropuesta = {
+        periodo: periodo,
+        version: 1,
+        estado: 'Pendiente de Aprobación (V1)',
+        creador: usuarioActual.username,
+        datos: datos
+      };
+
+      const resultado = await guardarPropuestaDB(nuevaPropuesta);
+
+      if (resultado) {
+        alert(`¡Propuesta V1 para el periodo ${periodo} enviada exitosamente a la nube!`);
+        window.location.href = 'aprobaciones.html';
+      } else {
+        btn.disabled = false;
+        btn.innerHTML = `<i class="fas fa-paper-plane"></i> Enviar Propuesta a Supabase`;
+      }
+    });
+
+    renderDistritos();
+    actualizarFechas();
+  </script>
+</body>
+</html>

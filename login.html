@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ingreso al Sistema - Gestión de Cronograma</title>
+  
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+  <div id="loginView">
+    <div class="login-header">
+      <img src="../img/LogoIcon.png" alt="Logo" class="login-logo">
+      <h1>Sistema Gestión<br>Cronograma</h1>
+    </div>
+
+    <div class="login-card">
+      <p>Ingresa tus credenciales para continuar</p>
+      
+      <div class="input-group">
+        <input type="text" id="usernameInput" placeholder="Usuario" autocomplete="username">
+        <i class="fas fa-user"></i>
+      </div>
+      
+      <div class="input-group">
+        <input type="password" id="passwordInput" placeholder="Contraseña" autocomplete="current-password">
+        <i class="fas fa-lock"></i>
+      </div>
+      
+      <button class="btn-login" id="btnIngresar">Ingresar</button>
+      <div id="errorMsg" class="error-msg">Credenciales incorrectas. Verifique usuario o contraseña.</div>
+    </div>
+  </div>
+
+  <script src="../shared.js"></script>
+  <script>
+    // Si ya existe sesión activa, redirige sin mostrar el login
+    const sesionPrevia = localStorage.getItem('assa_usuario_sesion');
+    if (sesionPrevia) {
+      try {
+        const sesion = JSON.parse(sesionPrevia);
+        if (sesion && sesion.perfil) {
+          window.location.replace(sesion.perfil === 'Administrador' ? 'planificacion.html' : 'aprobaciones.html');
+        }
+      } catch (e) {
+        localStorage.removeItem('assa_usuario_sesion');
+      }
+    }
+
+    const userInput = document.getElementById('usernameInput');
+    const passInput = document.getElementById('passwordInput');
+    const errorMsg = document.getElementById('errorMsg');
+    const btnIngresar = document.getElementById('btnIngresar');
+
+    function ejecutarLogin() {
+      const user = userInput.value.trim().toLowerCase();
+      const pass = passInput.value.trim();
+
+      if (usuariosPermitidos[user] && usuariosPermitidos[user].pass === pass) {
+        errorMsg.style.display = 'none';
+        const usuarioSesion = {
+          username: user,
+          perfil: usuariosPermitidos[user].perfil
+        };
+        localStorage.setItem('assa_usuario_sesion', JSON.stringify(usuarioSesion));
+
+        if (usuarioSesion.perfil === 'Administrador') {
+          window.location.replace('planificacion.html');
+        } else {
+          window.location.replace('aprobaciones.html');
+        }
+      } else {
+        errorMsg.style.display = 'block';
+      }
+    }
+
+    btnIngresar.addEventListener('click', ejecutarLogin);
+
+    // Enviar con Enter desde cualquier campo
+    passInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') ejecutarLogin();
+    });
+    userInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') passInput.focus();
+    });
+
+    // Limpiar mensaje de error al volver a escribir
+    userInput.addEventListener('input', () => { errorMsg.style.display = 'none'; });
+    passInput.addEventListener('input', () => { errorMsg.style.display = 'none'; });
+  </script>
+</body>
+</html>
